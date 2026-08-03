@@ -51,12 +51,14 @@ import {
   KeyRound,
   LockKeyhole,
   LogOut,
+  Mail,
   Menu,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Search,
   Save,
+  Send,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -277,8 +279,8 @@ const navItems = [
   ["/settings", Settings, "Configurações", "settings"],
 ] as const;
 const adminNavItems = [
-  ["/system-users", Users, "Usuários"],
-  ["/access-profiles", LockKeyhole, "Perfis de acesso"],
+  ["/system-users", Users, "Usuários", "system_users"],
+  ["/access-profiles", LockKeyhole, "Perfis de acesso", "access_profiles"],
 ] as const;
 function Shell({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -338,7 +340,7 @@ function Shell({ children }: { children: ReactNode }) {
               <span>{label}</span>
             </NavLink>
           ))}
-          {user.role==='admin'&&adminNavItems.map(([to,Icon,label])=><NavLink key={to} to={to} onClick={()=>setOpen(false)} aria-label={label} data-label={label}><Icon/><span>{label}</span></NavLink>)}
+          {adminNavItems.filter(([, , ,permission])=>allowed(permission)).map(([to,Icon,label])=><NavLink key={to} to={to} onClick={()=>setOpen(false)} aria-label={label} data-label={label}><Icon/><span>{label}</span></NavLink>)}
         </nav>
         <div className="side-foot">
           <div className="user-avatar">{user.name?.[0] || "A"}</div>
@@ -1417,10 +1419,15 @@ function Groups() {
   );
 }
 function SettingsPage() {
+  const storedUser=JSON.parse(localStorage.getItem('studek_user')||'{}');
   const [settings,setSettings]=useState<AnyObj|null>(null);const [keys,setKeys]=useState({openai:'',anthropic:''});const [loading,setLoading]=useState(true);const [saving,setSaving]=useState(false);const [testing,setTesting]=useState(false);const [message,setMessage]=useState('');const [error,setError]=useState('');
-  const load=useCallback(async()=>{setLoading(true);try{setSettings((await api.get('/ai/settings')).data)}catch(e){setError(errorMessage(e))}finally{setLoading(false)}},[]);useEffect(()=>{load()},[load]);
+  const [emailSettings,setEmailSettings]=useState<AnyObj|null>(null);const [emailPassword,setEmailPassword]=useState('');const [emailTestTo,setEmailTestTo]=useState(storedUser.email||'');const [emailSaving,setEmailSaving]=useState(false);const [emailTesting,setEmailTesting]=useState(false);const [emailMessage,setEmailMessage]=useState('');const [emailError,setEmailError]=useState('');
+  const load=useCallback(async()=>{setLoading(true);try{const [aiResponse,emailResponse]=await Promise.all([api.get('/ai/settings'),api.get('/email/settings')]);setSettings(aiResponse.data);setEmailSettings(emailResponse.data)}catch(e){setError(errorMessage(e))}finally{setLoading(false)}},[]);useEffect(()=>{load()},[load]);
   async function saveAi(){if(!settings)return;setSaving(true);setError('');setMessage('');try{const response=await api.put('/ai/settings',{enabled:Boolean(settings.enabled),provider:settings.provider,openaiModel:settings.openaiModel,anthropicModel:settings.anthropicModel,openaiApiKey:keys.openai||undefined,anthropicApiKey:keys.anthropic||undefined});setSettings(response.data);setKeys({openai:'',anthropic:''});setMessage('Configuração de IA salva com segurança.')}catch(e){setError(errorMessage(e))}finally{setSaving(false)}}
   async function testConnection(){if(!settings)return;setTesting(true);setError('');setMessage('');const provider=settings.provider as 'openai'|'anthropic';try{const response=await api.post('/ai/settings/test',{provider,model:provider==='openai'?settings.openaiModel:settings.anthropicModel,apiKey:keys[provider]||undefined});setSettings({...settings,lastTestedAt:response.data.testedAt});setMessage(`Conexão com ${provider==='openai'?'OpenAI':'Claude'} validada. Salve para manter qualquer chave nova.`)}catch(e){setError(errorMessage(e))}finally{setTesting(false)}}
+  function emailPayload(){return{...emailSettings,password:emailPassword||undefined}}
+  async function saveEmail(){if(!emailSettings)return;setEmailSaving(true);setEmailError('');setEmailMessage('');try{const response=await api.put('/email/settings',emailPayload());setEmailSettings(response.data);setEmailPassword('');setEmailMessage('Configuração de e-mail salva com segurança.')}catch(e){setEmailError(errorMessage(e))}finally{setEmailSaving(false)}}
+  async function testEmail(){if(!emailSettings||!emailTestTo)return;setEmailTesting(true);setEmailError('');setEmailMessage('');try{const response=await api.post('/email/settings/test',{...emailPayload(),testTo:emailTestTo});setEmailSettings({...emailSettings,lastTestedAt:response.data.testedAt});setEmailMessage(`Mensagem de teste enviada para ${emailTestTo}. Salve para manter qualquer senha nova.`)}catch(e){setEmailError(errorMessage(e))}finally{setEmailTesting(false)}}
   return (
     <>
       <PageHead
@@ -1436,6 +1443,19 @@ function SettingsPage() {
           <div className="ai-security-note"><ShieldCheck/><div><b>Credencial protegida</b><span>A chave é criptografada no servidor e usada somente nas solicitações iniciadas por você.</span></div></div>
           {error&&<div className="settings-feedback error">{error}</div>}{message&&<div className="settings-feedback success"><Check/>{message}</div>}
           <div className="ai-settings-actions"><span>{settings.lastTestedAt?`Último teste: ${date(settings.lastTestedAt)}`:'Conexão ainda não testada'}</span><button type="button" className="button ghost" onClick={testConnection} disabled={testing}>{testing?<RefreshCw/>:<Zap/>}{testing?'Testando…':'Testar conexão'}</button><button type="button" className="button primary" onClick={saveAi} disabled={saving}>{saving?<RefreshCw/>:<Save/>}{saving?'Salvando…':'Salvar configuração'}</button></div>
+        </div>}
+      </section>
+      <section className="panel email-settings-panel">
+        <div className="ai-settings-head"><div className="setting-icon email-icon"><Mail/></div><div><span className="eyebrow">E-MAIL E NOTIFICAÇÕES</span><h2>Servidor de envio SMTP</h2><p>Configure o remetente usado para mensagens de acesso, redefinição de senha, relatórios e avisos enviados aos usuários cadastrados.</p></div>{emailSettings&&<label className="ai-toggle"><input type="checkbox" checked={Boolean(emailSettings.enabled)} onChange={e=>setEmailSettings({...emailSettings,enabled:e.target.checked})}/><span/><b>{emailSettings.enabled?'Envio ativo':'Envio desativado'}</b></label>}</div>
+        {loading?<div className="settings-loading"><RefreshCw/>Carregando configuração…</div>:emailSettings&&<div className="email-settings-body">
+          <div className="email-fields-grid"><label><span>Servidor SMTP</span><input value={emailSettings.host} onChange={e=>setEmailSettings({...emailSettings,host:e.target.value})} placeholder="smtp.seudominio.com"/></label><label><span>Porta</span><input type="number" min="1" max="65535" value={emailSettings.port} onChange={e=>setEmailSettings({...emailSettings,port:Number(e.target.value)})}/></label><label><span>Segurança</span><select value={emailSettings.secure?'tls':emailSettings.requireTls?'starttls':'none'} onChange={e=>setEmailSettings({...emailSettings,secure:e.target.value==='tls',requireTls:e.target.value==='starttls'})}><option value="starttls">STARTTLS (recomendado)</option><option value="tls">SSL/TLS</option><option value="none">Sem criptografia</option></select></label><label><span>Usuário SMTP</span><input value={emailSettings.user} onChange={e=>setEmailSettings({...emailSettings,user:e.target.value})} placeholder="usuario@seudominio.com"/></label><label><span><KeyRound/> Senha SMTP</span><input type="password" autoComplete="new-password" value={emailPassword} onChange={e=>setEmailPassword(e.target.value)} placeholder={emailSettings.passwordConfigured?'•••••••••••• (já configurada)':'Informe a senha SMTP'}/><small>Deixe vazio para manter a senha atual.</small></label></div>
+          <div className="email-section-title"><b>Identidade do remetente</b><span>Dados exibidos na caixa de entrada dos usuários.</span></div>
+          <div className="email-sender-grid"><label><span>Nome do remetente</span><input value={emailSettings.fromName} onChange={e=>setEmailSettings({...emailSettings,fromName:e.target.value})} placeholder="Studek Analytics"/></label><label><span>E-mail do remetente</span><input type="email" value={emailSettings.fromAddress} onChange={e=>setEmailSettings({...emailSettings,fromAddress:e.target.value})} placeholder="notificacoes@seudominio.com"/></label><label><span>Responder para (opcional)</span><input type="email" value={emailSettings.replyTo} onChange={e=>setEmailSettings({...emailSettings,replyTo:e.target.value})} placeholder="suporte@seudominio.com"/></label></div>
+          <div className="email-section-title"><b>Tipos de mensagem</b><span>Defina quais comunicações poderão utilizar este servidor.</span></div>
+          <div className="email-notification-grid"><label className={emailSettings.notifyPasswords?'selected':''}><input type="checkbox" checked={Boolean(emailSettings.notifyPasswords)} onChange={e=>setEmailSettings({...emailSettings,notifyPasswords:e.target.checked})}/><KeyRound/><span><b>Acesso e senhas</b><small>Convites e links seguros de definição ou redefinição de senha.</small></span><i>{emailSettings.notifyPasswords&&<Check/>}</i></label><label className={emailSettings.notifyReports?'selected':''}><input type="checkbox" checked={Boolean(emailSettings.notifyReports)} onChange={e=>setEmailSettings({...emailSettings,notifyReports:e.target.checked})}/><Download/><span><b>Relatórios</b><small>Relatórios concluídos e arquivos disponibilizados pelo sistema.</small></span><i>{emailSettings.notifyReports&&<Check/>}</i></label><label className={emailSettings.notifySystem?'selected':''}><input type="checkbox" checked={Boolean(emailSettings.notifySystem)} onChange={e=>setEmailSettings({...emailSettings,notifySystem:e.target.checked})}/><Activity/><span><b>Notificações</b><small>Alertas de coletas, integrações e eventos importantes.</small></span><i>{emailSettings.notifySystem&&<Check/>}</i></label></div>
+          <div className="ai-security-note"><ShieldCheck/><div><b>Senha protegida</b><span>A senha SMTP é criptografada no servidor e nunca é retornada ao navegador.</span></div></div>
+          {emailError&&<div className="settings-feedback error">{emailError}</div>}{emailMessage&&<div className="settings-feedback success"><Check/>{emailMessage}</div>}
+          <div className="email-settings-actions"><span>{emailSettings.lastTestedAt?`Último envio: ${date(emailSettings.lastTestedAt)}`:'Nenhum e-mail de teste enviado'}</span><div className="email-test-field"><Mail/><input type="email" value={emailTestTo} onChange={e=>setEmailTestTo(e.target.value)} placeholder="Destinatário do teste"/></div><button type="button" className="button ghost" onClick={testEmail} disabled={emailTesting||!emailTestTo}>{emailTesting?<RefreshCw/>:<Send/>}{emailTesting?'Enviando…':'Enviar teste'}</button><button type="button" className="button primary" onClick={saveEmail} disabled={emailSaving}>{emailSaving?<RefreshCw/>:<Save/>}{emailSaving?'Salvando…':'Salvar e-mail'}</button></div>
         </div>}
       </section>
       <div className="grid two">
@@ -1476,7 +1496,7 @@ function Protected() {
   if(!token)return <Navigate to="/login"/>;
   if(checking)return <Loader/>;
   const allowed=(permission:string)=>user?.role==='admin'||user?.permissions?.includes(permission);
-  const firstRoute=navItems.find(([, , ,permission])=>allowed(permission))?.[0]||'/login';
+  const firstRoute=[...navItems,...adminNavItems].find(([, , ,permission])=>allowed(permission))?.[0]||'/login';
   const route=(permission:string,element:ReactNode)=>allowed(permission)?element:<Navigate to={firstRoute} replace/>;
   return (
     <Shell>
@@ -1489,8 +1509,8 @@ function Protected() {
         <Route path="/comparison-groups" element={route('comparison_groups',<Groups/>)} />
         <Route path="/collections" element={route('collections',<Collections/>)} />
         <Route path="/settings" element={route('settings',<SettingsPage/>)} />
-        <Route path="/system-users" element={user?.role==='admin'?<SystemUsersPage/>:<Navigate to={firstRoute} replace/>} />
-        <Route path="/access-profiles" element={user?.role==='admin'?<AccessProfilesPage/>:<Navigate to={firstRoute} replace/>} />
+        <Route path="/system-users" element={route('system_users',<SystemUsersPage/>)} />
+        <Route path="/access-profiles" element={route('access_profiles',<AccessProfilesPage/>)} />
         <Route path="*" element={<Navigate to={firstRoute} replace/>} />
       </Routes>
     </Shell>

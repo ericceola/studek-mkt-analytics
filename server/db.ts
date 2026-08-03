@@ -40,6 +40,16 @@ export async function initializeDatabase() {
   if(!existingAi.has('openai_api_key_encrypted'))await db.query(`ALTER TABLE workspace_settings ADD COLUMN openai_api_key_encrypted TEXT NULL`);
   if(!existingAi.has('anthropic_api_key_encrypted'))await db.query(`ALTER TABLE workspace_settings ADD COLUMN anthropic_api_key_encrypted TEXT NULL`);
   if(!existingAi.has('ai_last_tested_at'))await db.query(`ALTER TABLE workspace_settings ADD COLUMN ai_last_tested_at DATETIME NULL`);
+  const emailColumns=[
+    ['email_enabled','BOOLEAN NOT NULL DEFAULT FALSE'],['smtp_host','VARCHAR(255) NULL'],['smtp_port','SMALLINT UNSIGNED NOT NULL DEFAULT 587'],
+    ['smtp_secure','BOOLEAN NOT NULL DEFAULT FALSE'],['smtp_require_tls','BOOLEAN NOT NULL DEFAULT TRUE'],['smtp_user','VARCHAR(255) NULL'],
+    ['smtp_password_encrypted','TEXT NULL'],['email_from_name','VARCHAR(120) NULL'],['email_from_address','VARCHAR(190) NULL'],
+    ['email_reply_to','VARCHAR(190) NULL'],['email_notify_passwords','BOOLEAN NOT NULL DEFAULT TRUE'],['email_notify_reports','BOOLEAN NOT NULL DEFAULT TRUE'],
+    ['email_notify_system','BOOLEAN NOT NULL DEFAULT TRUE'],['email_last_tested_at','DATETIME NULL']
+  ] as const;
+  const [existingEmailRows]=await db.execute<RowDataPacket[]>(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='workspace_settings' AND COLUMN_NAME IN (${emailColumns.map(()=>'?').join(',')})`,emailColumns.map(([name])=>name));
+  const existingEmail=new Set(existingEmailRows.map(row=>String(row.COLUMN_NAME)));
+  for(const [name,definition] of emailColumns)if(!existingEmail.has(name))await db.query(`ALTER TABLE workspace_settings ADD COLUMN ${name} ${definition}`);
   await db.execute(`UPDATE ai_analysis_jobs SET status='queued',started_at=NULL WHERE status='running'`);
   const passwordHash = await bcrypt.hash(env.ADMIN_PASSWORD, 12);
   await db.execute(`INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'admin')
