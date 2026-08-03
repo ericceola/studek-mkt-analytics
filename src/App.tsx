@@ -49,6 +49,7 @@ import {
   Heart,
   Layers3,
   KeyRound,
+  LockKeyhole,
   LogOut,
   Menu,
   MoreHorizontal,
@@ -69,6 +70,7 @@ import ContentDashboard from "./pages/ContentDashboard";
 import StrategyDashboard from "./pages/StrategyDashboard";
 import ComparisonDashboard from "./pages/ComparisonDashboard";
 import PostDetail from "./pages/PostDetail";
+import {AccessProfilesPage,SystemUsersPage} from "./pages/AccessManagement";
 
 type AnyObj = Record<string, any>;
 const COLORS = [
@@ -267,12 +269,16 @@ function Login() {
 }
 
 const navItems = [
-  ["/dashboard", Gauge, "Visão geral"],
-  ["/profiles", Instagram, "Perfis"],
-  ["/comparisons", BarChart3, "Comparações"],
-  ["/comparison-groups", FolderKanban, "Grupos"],
-  ["/collections", Activity, "Coletas"],
-  ["/settings", Settings, "Configurações"],
+  ["/dashboard", Gauge, "Visão geral", "dashboard"],
+  ["/profiles", Instagram, "Perfis", "profiles"],
+  ["/comparisons", BarChart3, "Comparações", "comparisons"],
+  ["/comparison-groups", FolderKanban, "Grupos", "comparison_groups"],
+  ["/collections", Activity, "Coletas", "collections"],
+  ["/settings", Settings, "Configurações", "settings"],
+] as const;
+const adminNavItems = [
+  ["/system-users", Users, "Usuários"],
+  ["/access-profiles", LockKeyhole, "Perfis de acesso"],
 ] as const;
 function Shell({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -284,8 +290,9 @@ function Shell({ children }: { children: ReactNode }) {
     localStorage.getItem("studek_user") ||
       '{"name":"Administrador","role":"admin"}',
   );
+  const allowed=(permission:string)=>user.role==='admin'||user.permissions?.includes(permission);
   const current =
-    navItems.find((n) => location.pathname.startsWith(n[0]))?.[2] || "Painel";
+    [...navItems,...adminNavItems].find((n) => location.pathname.startsWith(n[0]))?.[2] || "Painel";
   useEffect(() => {
     if (!showLogoutConfirm) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -318,25 +325,26 @@ function Shell({ children }: { children: ReactNode }) {
         <button className="sidebar-collapse" title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"} onClick={() => { const next=!collapsed;setCollapsed(next);localStorage.setItem("studek_sidebar_collapsed",String(next)); }}><ChevronRight/></button>
         <nav>
           <small>ANÁLISES</small>
-          {navItems.slice(0, 3).map(([to, Icon, label]) => (
+          {navItems.slice(0, 3).filter(([, , ,permission])=>allowed(permission)).map(([to, Icon, label]) => (
             <NavLink key={to} to={to} onClick={() => setOpen(false)} aria-label={label} data-label={label}>
               <Icon />
               <span>{label}</span>
             </NavLink>
           ))}
           <small>GESTÃO</small>
-          {navItems.slice(3).map(([to, Icon, label]) => (
+          {navItems.slice(3).filter(([, , ,permission])=>allowed(permission)).map(([to, Icon, label]) => (
             <NavLink key={to} to={to} onClick={() => setOpen(false)} aria-label={label} data-label={label}>
               <Icon />
               <span>{label}</span>
             </NavLink>
           ))}
+          {user.role==='admin'&&adminNavItems.map(([to,Icon,label])=><NavLink key={to} to={to} onClick={()=>setOpen(false)} aria-label={label} data-label={label}><Icon/><span>{label}</span></NavLink>)}
         </nav>
         <div className="side-foot">
           <div className="user-avatar">{user.name?.[0] || "A"}</div>
           <div>
             <b>{user.name}</b>
-            <small>{user.role === "admin" ? "Administrador" : "Usuário"}</small>
+            <small>{user.role === "admin" ? "Administrador" : user.accessProfileName||"Usuário"}</small>
           </div>
           <button
             className="icon-btn"
@@ -1461,22 +1469,31 @@ function SettingsPage() {
 }
 
 function Protected() {
-  return localStorage.getItem("studek_token") ? (
+  const token=localStorage.getItem("studek_token");
+  const [user,setUser]=useState<AnyObj|null>(()=>{try{return JSON.parse(localStorage.getItem('studek_user')||'null')}catch{return null}});
+  const [checking,setChecking]=useState(Boolean(token&&user?.role!=='admin'&&!Array.isArray(user?.permissions)));
+  useEffect(()=>{if(!token)return;let active=true;api.get('/auth/me').then(({data})=>{if(!active)return;localStorage.setItem('studek_user',JSON.stringify(data));setUser(data)}).catch(()=>{}).finally(()=>active&&setChecking(false));return()=>{active=false}},[token]);
+  if(!token)return <Navigate to="/login"/>;
+  if(checking)return <Loader/>;
+  const allowed=(permission:string)=>user?.role==='admin'||user?.permissions?.includes(permission);
+  const firstRoute=navItems.find(([, , ,permission])=>allowed(permission))?.[0]||'/login';
+  const route=(permission:string,element:ReactNode)=>allowed(permission)?element:<Navigate to={firstRoute} replace/>;
+  return (
     <Shell>
       <Routes>
-              <Route path="/dashboard" element={<StrategyDashboard />} />
-        <Route path="/profiles" element={<Profiles />} />
-        <Route path="/profiles/:id" element={<ContentDashboard />} />
-        <Route path="/posts/:id" element={<PostDetail />} />
-        <Route path="/comparisons" element={<ComparisonDashboard />} />
-        <Route path="/comparison-groups" element={<Groups />} />
-        <Route path="/collections" element={<Collections />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/dashboard" />} />
+        <Route path="/dashboard" element={route('dashboard',<StrategyDashboard/>)} />
+        <Route path="/profiles" element={route('profiles',<Profiles/>)} />
+        <Route path="/profiles/:id" element={route('profiles',<ContentDashboard/>)} />
+        <Route path="/posts/:id" element={route('profiles',<PostDetail/>)} />
+        <Route path="/comparisons" element={route('comparisons',<ComparisonDashboard/>)} />
+        <Route path="/comparison-groups" element={route('comparison_groups',<Groups/>)} />
+        <Route path="/collections" element={route('collections',<Collections/>)} />
+        <Route path="/settings" element={route('settings',<SettingsPage/>)} />
+        <Route path="/system-users" element={user?.role==='admin'?<SystemUsersPage/>:<Navigate to={firstRoute} replace/>} />
+        <Route path="/access-profiles" element={user?.role==='admin'?<AccessProfilesPage/>:<Navigate to={firstRoute} replace/>} />
+        <Route path="*" element={<Navigate to={firstRoute} replace/>} />
       </Routes>
     </Shell>
-  ) : (
-    <Navigate to="/login" />
   );
 }
 export default function App() {

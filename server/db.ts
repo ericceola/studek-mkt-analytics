@@ -26,6 +26,10 @@ export async function initializeDatabase() {
   if (!existingSettings.has('collection_only_posts_newer_than')) await db.query(`ALTER TABLE workspace_settings ADD COLUMN collection_only_posts_newer_than VARCHAR(50) NOT NULL DEFAULT '30 days' AFTER collection_results_limit`);
   const [settingsRangeColumns] = await db.execute<RowDataPacket[]>(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='workspace_settings' AND COLUMN_NAME='collection_posts_until'`);
   if (!settingsRangeColumns.length) await db.query(`ALTER TABLE workspace_settings ADD COLUMN collection_posts_until DATE NULL AFTER collection_only_posts_newer_than`);
+  const [accessProfileColumns] = await db.execute<RowDataPacket[]>(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='access_profile_id'`);
+  if (!accessProfileColumns.length) await db.query(`ALTER TABLE users ADD COLUMN access_profile_id BIGINT UNSIGNED NULL AFTER role, ADD INDEX idx_users_access_profile(access_profile_id), ADD CONSTRAINT fk_users_access_profile FOREIGN KEY(access_profile_id) REFERENCES access_profiles(id) ON DELETE SET NULL`);
+  const [accessProfileConstraints] = await db.execute<RowDataPacket[]>(`SELECT CONSTRAINT_NAME FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='users' AND CONSTRAINT_NAME='fk_users_access_profile'`);
+  if (!accessProfileConstraints.length) await db.query(`ALTER TABLE users ADD CONSTRAINT fk_users_access_profile FOREIGN KEY(access_profile_id) REFERENCES access_profiles(id) ON DELETE SET NULL`);
   const aiColumns=['ai_enabled','ai_provider','openai_model','anthropic_model','openai_api_key_encrypted','anthropic_api_key_encrypted','ai_last_tested_at'];
   const [existingAiRows]=await db.execute<RowDataPacket[]>(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='workspace_settings' AND COLUMN_NAME IN (${aiColumns.map(()=>'?').join(',')})`,aiColumns);
   const existingAi=new Set(existingAiRows.map(row=>String(row.COLUMN_NAME)));
