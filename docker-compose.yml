@@ -1,0 +1,47 @@
+services:
+  app:
+    build: .
+    container_name: studek-mkt-analytics-app
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: instagram_analytics
+      DB_USER: instagram_app
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      APIFY_TOKEN: ${APIFY_TOKEN}
+      APIFY_ACTOR_ID: ${APIFY_ACTOR_ID:-apify/instagram-scraper}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL}
+      COLLECTION_POLL_INTERVAL_SECONDS: ${COLLECTION_POLL_INTERVAL_SECONDS:-20}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+  mysql:
+    image: mysql:8.4
+    container_name: studek-mkt-analytics-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: instagram_analytics
+      MYSQL_USER: instagram_app
+      MYSQL_PASSWORD: ${DB_PASSWORD:-}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes: ["instagram_mysql_data:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+volumes:
+  instagram_mysql_data:
