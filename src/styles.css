@@ -128,6 +128,7 @@ aside.collapsed nav a:hover::after,aside.collapsed nav a:focus-visible::after,as
 /* Mantém o rodapé do menu visível e rola somente os links quando faltar altura. */
 .app-shell>aside{overflow:visible}
 .side-head,.side-foot{flex:none}
-aside nav{flex:1;min-height:0;overflow-y:auto;align-content:start;scrollbar-width:thin;scrollbar-color:#39384a transparent}
+aside nav{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;align-content:start;scrollbar-width:thin;scrollbar-color:#39384a transparent}
 aside nav::-webkit-scrollbar{width:5px}
+aside nav::-webkit-scrollbar:horizontal{height:0}
 aside nav::-webkit-scrollbar-thumb{background:#39384a;border-radius:999px}
