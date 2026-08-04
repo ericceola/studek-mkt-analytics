@@ -4,6 +4,7 @@ import {Bar,BarChart,CartesianGrid,Cell,ComposedChart,Line,ResponsiveContainer,T
 import {Activity,ArrowUpRight,CalendarDays,Camera as Instagram,Download,FileText,Heart,MessageCircle,Play,Printer,RefreshCw,Search,SlidersHorizontal,Sparkles,TrendingUp} from 'lucide-react';
 import {api,errorMessage} from '../api';
 import {exportElementToLandscapePdf} from '../utils/exportPdf';
+import {PostThumbnail} from '../components/PostThumbnail';
 
 type Row=Record<string,any>;
 const palette=['#7140a4','#9a64c7','#c49be5','#34a98b','#f2a444'];
@@ -88,7 +89,7 @@ export default function ContentDashboard(){
 
       <div className="content-layout tertiary-grid">
         <ContentCard title="Top conteúdos" subtitle="Ranking das publicações filtradas" action={<select className="content-card-select" value={ranking} onChange={e=>setRanking(e.target.value)}><option value="engagement_count">Maior engajamento</option><option value="likes_count">Mais curtidas</option><option value="comments_count">Mais comentários</option><option value="plays_count">Mais reproduções</option><option value="views_count">Mais visualizações</option></select>}>
-          {ranked.length?<div className="top-content-list">{ranked.map((post:Row,index:number)=><Link to={`/posts/${post.id}`} key={post.id}><span className="top-position">{index+1}</span><div className="top-thumb">{post.display_url?<img src={post.display_url} alt=""/>:<Instagram/>}<i>{formatNames[post.post_type]||post.post_type}</i></div><div className="top-copy"><b>{post.caption||'Publicação sem legenda'}</b><small>{postDate(post.published_at)} · {String(post.hashtags).split(',').filter(Boolean).slice(0,3).map((h:string)=>`#${h}`).join(' ')}</small></div><div className="top-numbers"><span><Heart/>{compact(post.likes_count)}</span><span><MessageCircle/>{compact(post.comments_count)}</span><strong>{compact(post.engagement_count)}<small>engajamentos</small></strong></div><ArrowUpRight/></Link>)}</div>:<ChartEmpty/>}
+          {ranked.length?<div className="top-content-list">{ranked.map((post:Row,index:number)=><Link to={`/posts/${post.id}`} key={post.id}><span className="top-position">{index+1}</span><div className="top-thumb">{post.display_url?<PostThumbnail postId={post.id}/>:<Instagram/>}<i>{formatNames[post.post_type]||post.post_type}</i></div><div className="top-copy"><b>{post.caption||'Publicação sem legenda'}</b><small>{postDate(post.published_at)} · {String(post.hashtags).split(',').filter(Boolean).slice(0,3).map((h:string)=>`#${h}`).join(' ')}</small></div><div className="top-numbers"><span><Heart/>{compact(post.likes_count)}</span><span><MessageCircle/>{compact(post.comments_count)}</span><strong>{compact(post.engagement_count)}<small>engajamentos</small></strong></div><ArrowUpRight/></Link>)}</div>:<ChartEmpty/>}
         </ContentCard>
         <ContentCard title="Hashtags" subtitle="Engajamento acumulado e quantidade de usos">
           {data.hashtags.length?<div className="hashtag-list">{data.hashtags.slice(0,10).map((tag:Row)=><div key={tag.name}><div><b>#{tag.name}</b><span>{tag.uses} {tag.uses===1?'uso':'usos'}</span></div><i><em style={{width:`${tag.engagement/maxHash*100}%`}}/></i><strong>{compact(tag.engagement)}</strong></div>)}</div>:<ChartEmpty/>}

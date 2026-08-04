@@ -21,6 +21,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FRONTEND_URL: ${FRONTEND_URL}
       COLLECTION_POLL_INTERVAL_SECONDS: ${COLLECTION_POLL_INTERVAL_SECONDS:-20}
+      MEDIA_CACHE_DIR: /app/data/media-cache
+    volumes: ["instagram_media_cache:/app/data"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 20s
@@ -45,3 +47,4 @@ services:
       start_period: 30s
 volumes:
   instagram_mysql_data:
+  instagram_media_cache:

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-server/
+data/media-cache/
 .env
 *.log
 .DS_Store

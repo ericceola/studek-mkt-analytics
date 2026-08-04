@@ -3,6 +3,7 @@ import {Link,useParams} from 'react-router-dom';
 import {CartesianGrid,Line,LineChart,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';
 import {ArrowLeft,ArrowUpRight,CalendarDays,Eye,Heart,Images,MessageCircle,Play,RefreshCw,Trophy,Users} from 'lucide-react';
 import {api,errorMessage} from '../api';
+import {PostThumbnail} from '../components/PostThumbnail';
 
 type Row=Record<string,any>;
 const compact=(value:any)=>new Intl.NumberFormat('pt-BR',{notation:Number(value)>9999?'compact':'standard',maximumFractionDigits:1}).format(Number(value)||0);
@@ -24,7 +25,7 @@ export default function PostDetail(){
   return <div className="post-detail">
     <div className="post-detail-top"><Link to="/comparisons"><ArrowLeft/> Voltar ao ranking</Link><a href={post.post_url} target="_blank" rel="noreferrer">Abrir no Instagram <ArrowUpRight/></a></div>
     <section className="post-detail-hero">
-      <div className="post-detail-media">{post.display_url?<img src={post.display_url} alt={post.caption||'Publicação do Instagram'}/>:<Images/>}</div>
+      <div className="post-detail-media">{post.display_url?<PostThumbnail postId={post.id} alt={post.caption||'Publicação do Instagram'}/>:<Images/>}</div>
       <div className="post-detail-copy"><span>DESEMPENHO DA PUBLICAÇÃO</span><div className="post-author"><div className="post-author-avatar"><Users/>{post.profile_picture_url&&<img src={`/api/media/profiles/${post.profile_id}/picture`} alt={`@${post.username}`} onError={event=>{event.currentTarget.style.display='none'}}/>}</div><div><b>@{post.username}</b><small>{post.full_name||'Perfil monitorado'}</small></div></div><h1>{post.caption||'Publicação sem legenda'}</h1><div className="post-meta"><span><CalendarDays/> Publicada em {dateTime(post.published_at)}</span><span>{post.post_type||post.type||'Conteúdo'}</span><span>{data.daysOnline} dias online</span></div>{hashtags.length>0&&<div className="post-tags">{hashtags.map((tag:string)=><span key={tag}>#{tag.replace(/^#/,'')}</span>)}</div>}</div>
     </section>
     <div className="post-detail-kpis">

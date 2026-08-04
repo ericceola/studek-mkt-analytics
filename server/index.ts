@@ -15,6 +15,7 @@ import { abortRun, getDataset, getRun, startActor } from './services/apify.js';
 import { engagement, normalizePost, normalizeUsername } from './services/normalizer.js';
 import {decryptSecret,encryptSecret,generateProfileAnalysis,testAiConnection,type AiProvider} from './services/ai.js';
 import {sendSmtpTest,type SmtpConfiguration} from './services/email.js';
+import {cachePostImages,cachedPostImage,readCachedImage} from './services/mediaCache.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -55,6 +56,7 @@ app.get('/api/auth/me', authenticate, wrap(async (req, res) => {
 }));
 app.post('/api/auth/logout', authenticate, (_req, res) => res.status(204).end());
 app.get('/api/media/profiles/:id/picture',wrap(async(req,res)=>{const profiles=await rows<(RowDataPacket&{profile_picture_url:string|null})[]>('SELECT profile_picture_url FROM instagram_profiles WHERE id=?',[idOf(req)]);const picture=profiles[0]?.profile_picture_url;if(!picture)return res.status(404).end();const url=new URL(picture);if(url.protocol!=='https:'||(!url.hostname.endsWith('.cdninstagram.com')&&!url.hostname.endsWith('.fbcdn.net')))return res.status(400).end();const response=await fetch(url,{headers:{'user-agent':'Mozilla/5.0'}});if(!response.ok)return res.status(404).end();const contentType=response.headers.get('content-type')||'image/jpeg';if(!contentType.startsWith('image/'))return res.status(415).end();res.set({'Content-Type':contentType,'Cache-Control':'public, max-age=3600, stale-while-revalidate=86400'});res.send(Buffer.from(await response.arrayBuffer()));}));
+app.get('/api/media/posts/:id',wrap(async(req,res)=>{const posts=await rows<(RowDataPacket&{display_url:string|null})[]>('SELECT display_url FROM instagram_posts WHERE id=?',[idOf(req)]);const sourceUrl=posts[0]?.display_url;if(!sourceUrl)return res.status(404).end();const image=await cachedPostImage(idOf(req),sourceUrl);res.set({'Content-Type':image.contentType,'Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'});res.send(await readCachedImage(image));}));
 
 app.use('/api', authenticate);
 const permissionsForRequest=(req:AuthRequest):string[]=>{const path=req.path;if(path==='/access-profiles'&&req.method==='GET')return['access_profiles','system_users'];if(path.startsWith('/access-profiles'))return['access_profiles'];if(path.startsWith('/system-users'))return['system_users'];if(/^\/profiles\/\d+\/set-base$/.test(path))return['dashboard'];if(/^\/profiles\/\d+\/collect$/.test(path))return['profiles'];if(path==='/profiles'&&req.method==='GET')return['profiles','comparison_groups','collections','comparisons'];if(path.startsWith('/comparison-groups'))return['comparison_groups'];if(path.startsWith('/comparisons'))return['comparisons'];if(path.startsWith('/collection-settings')||path.startsWith('/email/settings'))return['settings'];if(path.startsWith('/collections')||path.startsWith('/runs'))return['collections'];if(path.startsWith('/ai/settings'))return['settings'];if(path.startsWith('/ai/analysis')||path.startsWith('/ai/analyze')||path.startsWith('/dashboard'))return['dashboard'];if(path.startsWith('/posts')||path.startsWith('/profiles'))return['profiles'];return[];};
@@ -195,6 +197,7 @@ app.get('/api/runs/:id', wrap(async(req,res)=>{ const data=await rows<RowDataPac
 async function importRun(localRunId:number) {
   const runs = await rows<(RowDataPacket & {profile_id:number;apify_dataset_id:string;collection_type:string;only_posts_older_than:string|null})[]>('SELECT * FROM apify_runs WHERE id=?',[localRunId]); const initialRun=runs[0]; if(!initialRun) throw new Error('Coleta não encontrada.');
   const items=await getDataset(initialRun.apify_dataset_id);
+  const imagesToCache=new Map<number,string>();
   await transaction(async c=>{
     const [locked]=await c.execute<(RowDataPacket&{profile_id:number;status:string})[]>('SELECT * FROM apify_runs WHERE id=? FOR UPDATE',[localRunId]);
     const run=locked[0];if(!run)throw new Error('Coleta não encontrada.');if(run.status==='succeeded')return;
@@ -209,6 +212,7 @@ async function importRun(localRunId:number) {
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE caption=VALUES(caption),post_type=VALUES(post_type),content_surface=VALUES(content_surface),post_url=VALUES(post_url),display_url=VALUES(display_url),video_url=VALUES(video_url),updated_at=CURRENT_TIMESTAMP`,
         [run.profile_id,post.instagramPostId,post.shortcode,post.type,post.surface,post.caption,post.postUrl,post.displayUrl,post.videoUrl,post.publishedAt,post.duration,post.paid,post.commentsDisabled,JSON.stringify(post.raw)]);
       const [found]=await c.execute<RowDataPacket[]>('SELECT id FROM instagram_posts WHERE profile_id=? AND (instagram_post_id=? OR shortcode=?) LIMIT 1',[run.profile_id,post.instagramPostId,post.shortcode]); const postId=Number(found[0].id); const metric=engagement(post.likes,post.comments,followerCount);
+      if(post.displayUrl)imagesToCache.set(postId,post.displayUrl);
       await c.execute('INSERT IGNORE INTO post_metrics(post_id,apify_run_id,likes_count,comments_count,views_count,plays_count,engagement_count,engagement_rate) VALUES(?,?,?,?,?,?,?,?)',[postId,localRunId,post.likes,post.comments,post.views,post.plays,metric.count,metric.rate]);
       for(const tag of post.hashtags){ await c.execute('INSERT IGNORE INTO hashtags(name) VALUES(?)',[tag]); const [h]=await c.execute<RowDataPacket[]>('SELECT id FROM hashtags WHERE name=?',[tag]); await c.execute('INSERT IGNORE INTO post_hashtags(post_id,hashtag_id) VALUES(?,?)',[postId,h[0].id]); }
       const nestedComments=Array.isArray(raw.latestComments)?raw.latestComments:Array.isArray(raw.comments)?raw.comments:[];
@@ -222,6 +226,7 @@ async function importRun(localRunId:number) {
     await c.execute('UPDATE instagram_profiles SET last_collected_at=UTC_TIMESTAMP() WHERE id=?',[run.profile_id]);
     await c.execute('UPDATE apify_runs SET status=\'succeeded\',finished_at=UTC_TIMESTAMP(),result_summary=? WHERE id=?',[JSON.stringify({itemsProcessed:items.length,postsProcessed:postCount}),localRunId]);
   });
+  void cachePostImages([...imagesToCache].map(([postId,sourceUrl])=>({postId,sourceUrl})));
 }
 async function refreshLocalRun(localId:number){ const found=await rows<(RowDataPacket & {apify_run_id:string;status:string;batch_id:number|null})[]>('SELECT * FROM apify_runs WHERE id=?',[localId]); if(!found[0]) throw Object.assign(new Error('Coleta não encontrada.'),{status:404}); if(!found[0].apify_run_id) throw Object.assign(new Error('Execução não iniciada.'),{status:400});
   const remote=await getRun(found[0].apify_run_id); const mapped:{[key:string]:string}={READY:'running',RUNNING:'running',SUCCEEDED:'succeeded',FAILED:'failed',ABORTED:'aborted',TIMED_OUT:'timed_out'}; const status=mapped[remote.status]||'running';

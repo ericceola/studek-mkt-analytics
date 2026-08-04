@@ -10,6 +10,7 @@ const schema = z.object({
   JWT_SECRET: z.string().min(16).default('development-secret-change-me'), JWT_EXPIRES_IN: z.string().default('8h'),
   ADMIN_NAME: z.string().default('Administrador'), ADMIN_EMAIL: z.string().email().default('admin@studek.local'),
   ADMIN_PASSWORD: z.string().min(8).default('admin123'), FRONTEND_URL: z.string().default('http://localhost:5173'),
-  COLLECTION_POLL_INTERVAL_SECONDS: z.coerce.number().min(5).default(20)
+  COLLECTION_POLL_INTERVAL_SECONDS: z.coerce.number().min(5).default(20),
+  MEDIA_CACHE_DIR: z.string().min(1).default('data/media-cache')
 });
 export const env = schema.parse(process.env);

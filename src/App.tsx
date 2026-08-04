@@ -68,6 +68,7 @@ import {
   Zap,
 } from "lucide-react";
 import { api, errorMessage } from "./api";
+import { PostThumbnail } from "./components/PostThumbnail";
 import ContentDashboard from "./pages/ContentDashboard";
 import StrategyDashboard from "./pages/StrategyDashboard";
 import ComparisonDashboard from "./pages/ComparisonDashboard";
@@ -984,7 +985,7 @@ function ProfileDetail() {
               >
                 <div className="post-image">
                   {post.display_url ? (
-                    <img src={post.display_url} />
+                    <PostThumbnail postId={post.id} />
                   ) : (
                     <Instagram />
                   )}
