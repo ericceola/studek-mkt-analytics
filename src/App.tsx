@@ -177,8 +177,8 @@ function Metric({ label, value, detail, icon: Icon, tone = "purple" }: AnyObj) {
 
 function Login() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("admin@seudominio.com");
-  const [password, setPassword] = useState("trocar_senha");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent) {
@@ -233,7 +233,7 @@ function Login() {
         <small>© 2026 Studek · Marketing Analytics</small>
       </section>
       <section className="login-panel">
-        <form onSubmit={submit}>
+        <form onSubmit={submit} autoComplete="off">
           <span className="eyebrow">Bem-vindo de volta</span>
           <h2>Acesse seu painel</h2>
           <p>Use suas credenciais para continuar.</p>
@@ -242,6 +242,10 @@ function Login() {
             E-mail
             <input
               type="email"
+              name="studek_login_email"
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="voce@empresa.com"
@@ -251,6 +255,10 @@ function Login() {
             Senha
             <input
               type="password"
+              name="studek_login_password"
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -303,7 +311,6 @@ function Shell({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [showLogoutConfirm]);
-
   const logout = () => {
     localStorage.clear();
     nav("/login");
@@ -324,7 +331,7 @@ function Shell({ children }: { children: ReactNode }) {
             <X />
           </button>
         </div>
-        <button className="sidebar-collapse" title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"} onClick={() => { const next=!collapsed;setCollapsed(next);localStorage.setItem("studek_sidebar_collapsed",String(next)); }}><ChevronRight/></button>
+        <button type="button" className="sidebar-collapse" title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label={collapsed ? "Expandir menu lateral" : "Recolher menu lateral"} onClick={() => { const next=!collapsed;setCollapsed(next);localStorage.setItem("studek_sidebar_collapsed",String(next)); }}><ChevronRight/></button>
         <nav>
           <small>ANÁLISES</small>
           {navItems.slice(0, 3).filter(([, , ,permission])=>allowed(permission)).map(([to, Icon, label]) => (
